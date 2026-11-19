@@ -1,6 +1,7 @@
 import { Route, Routes } from 'react-router-dom'
 import PublicLayout from './layouts/PublicLayout'
 import AppLayout from './layouts/AppLayout'
+import ProtectedRoute from './components/ProtectedRoute'
 import Landing from './pages/Landing'
 import About from './pages/About'
 import Features from './pages/Features'
@@ -24,13 +25,15 @@ export default function App() {
         <Route path="/register" element={<Register />} />
       </Route>
 
-      <Route element={<AppLayout />}>
-        <Route path="/dashboard" element={<Dashboard />} />
-        {personalPages.map((p) => (
-          <Route key={p} path={`/${p}`} element={<ComingSoon />} />
-        ))}
-        <Route path="/org/:orgId/dashboard" element={<OrgDashboard />} />
-        <Route path="/org/:orgId/:module" element={<ComingSoon />} />
+      <Route element={<ProtectedRoute />}>
+        <Route element={<AppLayout />}>
+          <Route path="/dashboard" element={<Dashboard />} />
+          {personalPages.map((p) => (
+            <Route key={p} path={`/${p}`} element={<ComingSoon />} />
+          ))}
+          <Route path="/org/:orgId/dashboard" element={<OrgDashboard />} />
+          <Route path="/org/:orgId/:module" element={<ComingSoon />} />
+        </Route>
       </Route>
 
       <Route path="*" element={<NotFound />} />

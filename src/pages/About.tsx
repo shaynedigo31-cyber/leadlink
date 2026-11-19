@@ -15,7 +15,7 @@ export default function About() {
       </p>
       <h2 className="mt-10 text-2xl font-bold">Where we are</h2>
       <p className="mt-3 text-muted">
-        LEADLINK is in early development. Right now you can browse the interface. Accounts, organizations and the Library are being built in phases.
+        LEADLINK is in early development. Accounts and organization creation are being built now; the Library and other modules come in later phases.
       </p>
     </div>
   )

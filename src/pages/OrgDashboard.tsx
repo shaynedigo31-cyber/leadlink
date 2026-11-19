@@ -1,19 +1,37 @@
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { CalendarDays, FileText, ListChecks, Users } from 'lucide-react'
 import MockBanner from '../components/MockBanner'
-import { mockEvents, mockOrgs, mockStats, mockTasks } from '../lib/mock'
+import { useAuth } from '../context/AuthContext'
+import { mockEvents, mockStats, mockTasks } from '../lib/mock'
 
 const icons = [Users, CalendarDays, ListChecks, FileText]
 
 export default function OrgDashboard() {
   const { orgId } = useParams()
-  const org = mockOrgs.find((o) => o.id === orgId)
+  const { memberships } = useAuth()
+  const membership = memberships.find((m) => m.org_id === orgId)
+
+  if (!membership) {
+    return (
+      <div className="card mx-auto mt-10 max-w-md p-10 text-center">
+        <h1 className="text-xl font-bold">Organization not found</h1>
+        <p className="mt-2 text-sm text-muted">It doesn’t exist, or you aren’t a member of it.</p>
+        <Link to="/dashboard" className="btn-primary mt-6">Back to dashboard</Link>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-extrabold sm:text-3xl">{org ? org.name : 'Organization'}</h1>
-        <p className="mt-1 text-sm text-muted">Organization overview</p>
+        <h1 className="text-2xl font-extrabold sm:text-3xl">{membership.org_name}</h1>
+        <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted">
+          Organization overview
+          <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">{membership.role_name ?? 'Pending'}</span>
+          {membership.org_status !== 'approved' && (
+            <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">Awaiting approval</span>
+          )}
+        </p>
       </div>
       <MockBanner />
 

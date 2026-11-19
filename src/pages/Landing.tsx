@@ -23,9 +23,8 @@ export default function Landing() {
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link to="/register" className="btn-primary">Create an account</Link>
-            <Link to="/dashboard" className="btn-ghost">Preview the dashboard</Link>
+            <Link to="/login" className="btn-ghost">Log in</Link>
           </div>
-          <p className="mt-3 text-xs text-muted">The preview uses sample data. Accounts are not live yet.</p>
         </div>
       </section>
 
