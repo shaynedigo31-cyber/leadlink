@@ -57,11 +57,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [m, p] = await Promise.all([
       supabase
         .from('organization_members')
-        .select('id, org_id, status, organizations(name, status), org_roles(name)')
+        .select('id, org_id, status, organizations(name, status), org_roles!organization_members_role_id_fkey(name)')
         .eq('user_id', uid)
         .neq('status', 'removed'),
       supabase.from('profiles').select('full_name').eq('id', uid).maybeSingle(),
     ])
+    if (m.error) console.error('Memberships error:', m.error.message)
     if (!m.error && m.data) {
       const rows = m.data as unknown as Row[]
       setMemberships(
@@ -100,3 +101,5 @@ export function useAuth(): AuthState {
   if (!ctx) throw new Error('useAuth must be used inside AuthProvider')
   return ctx
 }
+
+
