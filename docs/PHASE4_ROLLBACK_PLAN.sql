@@ -16,6 +16,9 @@ drop function if exists public.trg_log_organization_events();
 drop trigger if exists on_member_status_change on public.organization_members;
 drop function if exists public.trg_log_member_status_change();
 
+drop trigger if exists on_invitation_activity on public.organization_invitations;
+drop function if exists public.trg_log_invitation_events();
+
 -- 2. Drop 0004 RPC Functions
 drop function if exists public.mark_all_notifications_read();
 drop function if exists public.cancel_organization_invitation(uuid);

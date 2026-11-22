@@ -20,12 +20,13 @@ export default function Invitations() {
   const [loading, setLoading] = useState(true)
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
+  const [loadError, setLoadError] = useState('')
   const [busyId, setBusyId] = useState<string | null>(null)
 
   const fetchInvitations = useCallback(async () => {
     if (!user?.email) return
     setLoading(true)
-    setError('')
+    setLoadError('')
 
     const { data, error: dbErr } = await supabase
       .from('organization_invitations')
@@ -36,6 +37,7 @@ export default function Invitations() {
     if (dbErr) {
       console.warn('invitations fetch error:', dbErr.message)
       setInvites([])
+      setLoadError(dbErr.message)
     } else {
       setInvites((data as unknown as DbInvitation[]) ?? [])
     }
@@ -51,7 +53,7 @@ export default function Invitations() {
     setNotice('')
     setError('')
 
-    const { error: rpcErr } = await supabase.rpc('respond_to_invitation', {
+    const { data: response, error: rpcErr } = await supabase.rpc('respond_to_invitation', {
       p_invitation: invitationId,
       p_action: action,
     })
@@ -59,10 +61,15 @@ export default function Invitations() {
     setBusyId(null)
     if (rpcErr) {
       setError(rpcErr.message)
+    } else if (response === 'expired') {
+      setError('This invitation has expired. No membership was created; ask the organization to send a new invitation.')
+      setInvites((prev) => prev.filter((i) => i.id !== invitationId))
+    } else if (response !== (action === 'accept' ? 'accepted' : 'declined')) {
+      setError('The invitation response was not confirmed. Refresh the page before trying again.')
     } else {
       setNotice(`Invitation ${action === 'accept' ? 'accepted' : 'declined'} successfully.`)
       setInvites((prev) => prev.filter((i) => i.id !== invitationId))
-      await refresh()
+      if (response === 'accepted') await refresh()
     }
   }
 
@@ -82,6 +89,15 @@ export default function Invitations() {
         </div>
       )}
 
+      {loadError && (
+        <div className="flex items-center justify-between gap-3 rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-700" role="alert">
+          <p>Invitations could not be loaded: {loadError}</p>
+          <button type="button" className="btn-ghost text-xs" onClick={() => void fetchInvitations()}>
+            Try again
+          </button>
+        </div>
+      )}
+
       {notice && (
         <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700" role="status">
           <CheckCircle2 size={18} className="shrink-0" />
@@ -91,7 +107,7 @@ export default function Invitations() {
 
       {loading ? (
         <div className="card p-8 text-center text-sm text-muted">Loading invitations…</div>
-      ) : invites.length === 0 ? (
+      ) : loadError ? null : invites.length === 0 ? (
         <div className="card flex flex-col items-center p-12 text-center">
           <span className="icon-chip"><Mail size={24} strokeWidth={1.75} /></span>
           <p className="mt-4 font-bold text-ink">No pending invitations</p>

@@ -25,7 +25,7 @@ begin
       add constraint organization_members_role_same_org_fkey
       foreign key (org_id, role_id) references public.org_roles (org_id, id);
   end if;
-end $$;
+end; $$;
 
 COMMIT;
    

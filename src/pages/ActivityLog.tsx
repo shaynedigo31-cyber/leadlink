@@ -30,7 +30,7 @@ export default function ActivityLog() {
   const { memberships } = useAuth()
   const currentMembership = memberships.find((m) => m.org_id === orgId)
 
-  const [filter, setFilter] = useState<'all' | 'membership' | 'role' | 'ownership' | 'governance' | 'position'>('all')
+  const [filter, setFilter] = useState<'all' | 'membership' | 'role' | 'ownership' | 'governance' | 'settings' | 'position'>('all')
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -49,9 +49,9 @@ export default function ActivityLog() {
       .limit(50)
 
     if (dbErr) {
-      // Graceful fallback if 0004 table is pending execution
       console.warn('activity_logs query notice:', dbErr.message)
       setLogs([])
+      setError(dbErr.message)
     } else if (data) {
       const records = (data as unknown as DbLog[]).map((r) => ({
         id: r.id,
@@ -94,8 +94,9 @@ export default function ActivityLog() {
       case 'membership':
         return <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">Membership</span>
       case 'governance':
-      case 'settings':
         return <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800">Governance</span>
+      case 'settings':
+        return <span className="rounded-full bg-slate-50 px-2 py-0.5 text-xs font-semibold text-slate-700">Settings</span>
       case 'position':
         return <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">Position</span>
     }
@@ -119,7 +120,7 @@ export default function ActivityLog() {
         {/* Filter Controls & Refresh */}
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex flex-wrap gap-1 rounded-xl border border-hairline bg-white p-1">
-            {(['all', 'membership', 'role', 'ownership', 'position', 'governance'] as const).map((cat) => (
+            {(['all', 'membership', 'role', 'ownership', 'position', 'governance', 'settings'] as const).map((cat) => (
               <button
                 key={cat}
                 onClick={() => setFilter(cat)}

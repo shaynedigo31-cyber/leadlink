@@ -164,3 +164,66 @@
    - Account A is demoted to `Administrator`.
 5. Switch to **Account B** and attempt to leave:
    - Operation fails: `'Transfer ownership before leaving as the final active Owner'`.
+
+---
+
+## 13. Invitation Security Regression Cases
+
+Run these cases only in a controlled test project. They are test instructions,
+not evidence that the cases have passed.
+
+1. As the Owner, create a pending invitation for Account B. Confirm one
+   `Invitation Issued` activity event appears.
+2. Before Account B accepts, suspend the organization as the platform admin.
+   As Account B, accept the invitation.
+   - Expected: the RPC fails because the organization is not approved.
+   - No active membership or `accepted` invitation status is created.
+3. Re-approve the organization, then have Account B accept the still-pending
+   invitation.
+   - Expected: membership and invitation status change atomically.
+   - The RPC returns `accepted`; membership/role and invitation events are
+     recorded in the same transaction.
+4. Create another invitation for an address not owned by Account B. Attempt
+   accept and decline while signed in as Account B.
+   - Expected: both are denied and invitation status remains pending.
+5. In a test-only fixture, set an invitation's expiry into the past. As the
+   intended recipient, respond to it.
+   - Expected: RPC returns `expired`, no membership is created, status is
+     persisted as `expired`, and an `Invitation Expired` event is recorded.
+6. Create a new invitation for the same organization/email as the expired
+   fixture.
+   - Expected: the stale pending row is marked expired and a new pending
+     invitation can be created.
+7. Decline one pending invitation and cancel another as an authorized manager.
+   - Expected: each status transition and the corresponding audit event occur
+     once. A second cancellation attempt is rejected.
+8. Attempt to create an invitation with a role from a different organization
+   or the system Owner wildcard role.
+   - Expected: the RPC and same-organization constraint reject it.
+9. After sending an invitation, activate the intended recipient through the
+   ordinary membership approval flow before they accept the invitation.
+   - Expected: invitation acceptance is rejected, the member's role is
+     unchanged, the invitation remains pending, and exactly one membership row
+     exists.
+10. Race invitation acceptance against a join-request insert for the same
+    organization and user in a controlled test database.
+    - Expected: the `(org_id, user_id)` unique constraint and atomic upsert
+      prevent duplicate membership rows; any active membership is not
+      overwritten by invitation acceptance.
+
+## 14. Audit Trigger Regression Cases
+
+1. In a controlled database, perform one membership update that changes status,
+   role, and position together.
+   - Expected: the membership, role, and position event categories are all
+     represented; no branch masks another.
+2. Transfer ownership.
+   - Expected: exactly one `Organization Ownership Transferred` event is
+     recorded along with the atomic role changes.
+3. Change organization name/description, then status.
+   - Expected: settings and governance events are distinct.
+4. Attempt direct client execution of `log_org_activity` and all trigger
+   functions, and direct INSERT/UPDATE/DELETE on `activity_logs`.
+   - Expected: permission denied.
+5. Filter the activity viewer by `settings`.
+   - Expected: organization detail updates appear in that filter.

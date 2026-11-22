@@ -79,9 +79,16 @@ begin
   if tg_op = 'INSERT' then
     insert into public.activity_logs (org_id, actor_id, action, category, details)
     values (new.id, auth.uid(), 'Organization Created', 'governance', 'Organization registered: ' || new.name);
-  elsif tg_op = 'UPDATE' and old.status is distinct from new.status then
-    insert into public.activity_logs (org_id, actor_id, action, category, details)
-    values (new.id, auth.uid(), 'Organization Status Changed', 'governance', 'Status transitioned from ' || old.status || ' to ' || new.status);
+  elsif tg_op = 'UPDATE' then
+    if old.status is distinct from new.status then
+      insert into public.activity_logs (org_id, actor_id, action, category, details)
+      values (new.id, auth.uid(), 'Organization Status Changed', 'governance', 'Status transitioned from ' || old.status || ' to ' || new.status);
+    end if;
+    if old.name is distinct from new.name
+       or old.description is distinct from new.description then
+      insert into public.activity_logs (org_id, actor_id, action, category, details)
+      values (new.id, auth.uid(), 'Organization Details Updated', 'settings', 'Organization name or description was updated');
+    end if;
   end if;
   return new;
 end;
@@ -94,43 +101,69 @@ create trigger on_organization_activity
 
 create or replace function public.trg_log_member_status_change()
 returns trigger language plpgsql security definer set search_path = '' as $$
+declare
+  v_old_is_owner boolean;
+  v_new_is_owner boolean;
 begin
   if tg_op = 'INSERT' and new.status = 'pending' then
     insert into public.activity_logs (org_id, actor_id, action, category, details)
     values (new.org_id, auth.uid(), 'Join Request Submitted', 'membership', 'Membership application submitted');
-  elsif tg_op = 'UPDATE' and old.status is distinct from new.status then
-    insert into public.activity_logs (org_id, actor_id, action, category, details)
-    values (
-      new.org_id,
-      auth.uid(),
-      case
-        when old.status = 'pending' and new.status = 'active' then 'Membership Approved'
-        when old.status = 'pending' and new.status = 'removed' then 'Membership Rejected'
-        when old.status = 'active' and new.status = 'removed' and auth.uid() = old.user_id then 'Member Left Organization'
-        when old.status = 'active' and new.status = 'removed' then 'Member Removed'
-        else 'Membership Status Changed'
-      end,
-      'membership',
-      'Status transitioned from ' || old.status || ' to ' || new.status
-    );
-  elsif tg_op = 'UPDATE' and old.role_id is distinct from new.role_id then
-    insert into public.activity_logs (org_id, actor_id, action, category, details)
-    values (
-      new.org_id,
-      auth.uid(),
-      'Member Role Reassigned',
-      'role',
-      'Member role was updated'
-    );
-  elsif tg_op = 'UPDATE' and old.position_title is distinct from new.position_title then
-    insert into public.activity_logs (org_id, actor_id, action, category, details)
-    values (
-      new.org_id,
-      auth.uid(),
-      'Member Position Assigned',
-      'position',
-      'Position set to: ' || coalesce(new.position_title, 'None')
-    );
+  elsif tg_op = 'UPDATE' then
+    if old.status is distinct from new.status then
+      insert into public.activity_logs (org_id, actor_id, action, category, details)
+      values (
+        new.org_id,
+        auth.uid(),
+        case
+          when old.status = 'pending' and new.status = 'active' and auth.uid() = new.user_id then 'Membership Activated via Invitation'
+          when old.status = 'pending' and new.status = 'active' then 'Membership Approved'
+          when old.status = 'pending' and new.status = 'removed' then 'Membership Rejected'
+          when old.status = 'active' and new.status = 'removed' and auth.uid() = old.user_id then 'Member Left Organization'
+          when old.status = 'active' and new.status = 'removed' then 'Member Removed'
+          else 'Membership Status Changed'
+        end,
+        'membership',
+        'Status transitioned from ' || old.status || ' to ' || new.status
+      );
+    end if;
+
+    if old.role_id is distinct from new.role_id then
+      select exists (
+        select 1 from public.org_roles r
+        where r.id = old.role_id and r.org_id = old.org_id
+          and r.is_system and r.permissions @> array['*']::text[]
+      ) into v_old_is_owner;
+      select exists (
+        select 1 from public.org_roles r
+        where r.id = new.role_id and r.org_id = new.org_id
+          and r.is_system and r.permissions @> array['*']::text[]
+      ) into v_new_is_owner;
+
+      if v_new_is_owner then
+        insert into public.activity_logs (org_id, actor_id, action, category, details)
+        values (new.org_id, auth.uid(), 'Organization Ownership Transferred', 'ownership', 'Ownership was transferred to an active member');
+      elsif not v_old_is_owner then
+        insert into public.activity_logs (org_id, actor_id, action, category, details)
+        values (
+          new.org_id,
+          auth.uid(),
+          case when old.role_id is null then 'Member Role Assigned' else 'Member Role Reassigned' end,
+          'role',
+          'Member role was updated'
+        );
+      end if;
+    end if;
+
+    if old.position_title is distinct from new.position_title then
+      insert into public.activity_logs (org_id, actor_id, action, category, details)
+      values (
+        new.org_id,
+        auth.uid(),
+        'Member Position Assigned',
+        'position',
+        'Position set to: ' || coalesce(new.position_title, 'None')
+      );
+    end if;
   elsif tg_op = 'DELETE' and old.status = 'pending' then
     insert into public.activity_logs (org_id, actor_id, action, category, details)
     values (old.org_id, auth.uid(), 'Join Request Cancelled', 'membership', 'Pending membership application withdrawn');
@@ -188,6 +221,22 @@ create unique index if not exists unique_pending_org_invitation
   on public.organization_invitations (org_id, lower(invited_email))
   where status = 'pending';
 
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'organization_invitations_role_same_org_fkey'
+      and conrelid = 'public.organization_invitations'::regclass
+  ) then
+    alter table public.organization_invitations
+      add constraint organization_invitations_role_same_org_fkey
+      foreign key (org_id, role_id)
+      references public.org_roles (org_id, id) on delete cascade;
+  end if;
+end;
+$$;
+
 alter table public.organization_invitations enable row level security;
 
 revoke all on public.organization_invitations from public, anon, authenticated;
@@ -204,6 +253,47 @@ create policy "invitations: managers and invitees can read" on public.organizati
     )
     or public.is_platform_admin()
   );
+
+create or replace function public.trg_log_invitation_events()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare
+  v_action text;
+  v_details text;
+begin
+  if tg_op = 'INSERT' then
+    v_action := 'Invitation Issued';
+    v_details := 'Invitation created';
+  elsif tg_op = 'UPDATE' and old.status is distinct from new.status then
+    v_action := case new.status
+      when 'accepted' then 'Invitation Accepted'
+      when 'declined' then 'Invitation Declined'
+      when 'cancelled' then 'Invitation Cancelled'
+      when 'expired' then 'Invitation Expired'
+      else 'Invitation Status Changed'
+    end;
+    v_details := 'Invitation status changed to ' || new.status;
+  else
+    return coalesce(new, old);
+  end if;
+
+  insert into public.activity_logs (org_id, actor_id, action, category, details)
+  values (
+    case when tg_op = 'DELETE' then old.org_id else new.org_id end,
+    auth.uid(),
+    v_action,
+    'membership',
+    v_details
+  );
+  return coalesce(new, old);
+end;
+$$;
+
+drop trigger if exists on_invitation_activity on public.organization_invitations;
+create trigger on_invitation_activity
+  after insert or update on public.organization_invitations
+  for each row execute function public.trg_log_invitation_events();
+
+revoke all on function public.trg_log_invitation_events() from public, anon, authenticated;
 
 create or replace function public.create_organization_invitation(
   p_org uuid,
@@ -222,7 +312,10 @@ begin
     raise exception 'Not signed in';
   end if;
 
-  if not exists (select 1 from public.organizations o where o.id = p_org and o.status = 'approved') then
+  perform 1 from public.organizations o
+  where o.id = p_org and o.status = 'approved'
+  for update;
+  if not found then
     raise exception 'Invitations can only be sent for approved organizations';
   end if;
 
@@ -259,29 +352,27 @@ begin
     raise exception 'User is already an active member of this organization';
   end if;
 
+  update public.organization_invitations
+  set status = 'expired'
+  where org_id = p_org
+    and lower(invited_email) = v_clean_email
+    and status = 'pending'
+    and expires_at <= now();
+
   insert into public.organization_invitations (org_id, invited_email, role_id, invited_by)
   values (p_org, v_clean_email, p_role, auth.uid())
   returning id into v_invitation_id;
-
-  -- Record in activity log
-  insert into public.activity_logs (org_id, actor_id, action, category, details)
-  values (
-    p_org,
-    auth.uid(),
-    'Invitation Issued',
-    'membership',
-    'Invitation sent to ' || v_clean_email
-  );
 
   return v_invitation_id;
 end;
 $$;
 
+drop function if exists public.respond_to_invitation(uuid, text);
 create or replace function public.respond_to_invitation(
   p_invitation uuid,
   p_action text
 )
-returns void language plpgsql security definer set search_path = '' as $$
+returns text language plpgsql security definer set search_path = '' as $$
 declare
   v_org uuid;
   v_email text;
@@ -289,16 +380,37 @@ declare
   v_status text;
   v_caller_email text;
   v_expires_at timestamptz;
+  v_member_id uuid;
 begin
   if auth.uid() is null then
     raise exception 'Not signed in';
   end if;
 
-  if p_action not in ('accept','decline') then
+  if p_action is null or p_action not in ('accept','decline') then
     raise exception 'Action must be accept or decline';
   end if;
 
+  select i.org_id, lower(i.invited_email) into v_org, v_email
+  from public.organization_invitations i
+  where i.id = p_invitation;
+  if not found then
+    raise exception 'Invitation not found';
+  end if;
+
   select lower(u.email) into v_caller_email from auth.users u where u.id = auth.uid();
+  if v_caller_email is null then
+    raise exception 'Authenticated user email is unavailable';
+  end if;
+  if v_email is distinct from v_caller_email then
+    raise exception 'This invitation was addressed to a different email';
+  end if;
+
+  perform 1 from public.organizations o
+  where o.id = v_org
+  for update;
+  if not found then
+    raise exception 'Organization not found';
+  end if;
 
   select i.org_id, lower(i.invited_email), i.role_id, i.status, i.expires_at
   into v_org, v_email, v_role, v_status, v_expires_at
@@ -310,20 +422,27 @@ begin
     raise exception 'Invitation not found';
   end if;
 
+  if v_email is distinct from v_caller_email then
+    raise exception 'This invitation was addressed to a different email';
+  end if;
+
   if v_status <> 'pending' then
     raise exception 'Invitation is no longer pending';
   end if;
 
-  if v_expires_at is not null and v_expires_at < now() then
+  if v_expires_at <= now() then
     update public.organization_invitations set status = 'expired' where id = p_invitation;
-    raise exception 'Invitation has expired';
-  end if;
-
-  if v_email <> v_caller_email then
-    raise exception 'This invitation was addressed to a different email';
+    return 'expired';
   end if;
 
   if p_action = 'accept' then
+    perform 1 from public.organizations o
+    where o.id = v_org and o.status = 'approved'
+    for update;
+    if not found then
+      raise exception 'Invitations can only be accepted for approved organizations';
+    end if;
+
     -- Verify role still belongs to org and is valid
     if not exists (
       select 1 from public.org_roles r
@@ -332,22 +451,23 @@ begin
     ) then
       raise exception 'Invited role is no longer valid or contains prohibited wildcard permissions';
     end if;
-    -- Check if user has an existing membership row
-    if exists (select 1 from public.organization_members where org_id = v_org and user_id = auth.uid()) then
-      update public.organization_members
-      set role_id = v_role, status = 'active', joined_at = now()
-      where org_id = v_org and user_id = auth.uid();
-    else
-      insert into public.organization_members (org_id, user_id, role_id, status, joined_at)
-      values (v_org, auth.uid(), v_role, 'active', now());
+    insert into public.organization_members as member (org_id, user_id, role_id, status, joined_at)
+    values (v_org, auth.uid(), v_role, 'active', now())
+    on conflict (org_id, user_id) do update
+    set role_id = excluded.role_id, status = 'active', joined_at = excluded.joined_at
+    where member.status <> 'active'
+    returning member.id into v_member_id;
+
+    if not found then
+      raise exception 'User is already an active member of this organization';
     end if;
 
     update public.organization_invitations set status = 'accepted' where id = p_invitation;
 
-    insert into public.activity_logs (org_id, actor_id, action, category, details)
-    values (v_org, auth.uid(), 'Invitation Accepted', 'membership', 'Member joined via email invitation');
+    return 'accepted';
   else
     update public.organization_invitations set status = 'declined' where id = p_invitation;
+    return 'declined';
   end if;
 end;
 $$;
@@ -356,14 +476,21 @@ create or replace function public.cancel_organization_invitation(p_invitation uu
 returns void language plpgsql security definer set search_path = '' as $$
 declare
   v_org uuid;
+  v_status text;
 begin
   if auth.uid() is null then
     raise exception 'Not signed in';
   end if;
 
-  select org_id into v_org from public.organization_invitations where id = p_invitation;
+  select org_id, status into v_org, v_status
+  from public.organization_invitations
+  where id = p_invitation
+  for update;
   if not found then
     raise exception 'Invitation not found';
+  end if;
+  if v_status <> 'pending' then
+    raise exception 'Invitation is no longer pending';
   end if;
 
   if not public.has_org_permission(v_org, 'members.manage') then
@@ -372,7 +499,7 @@ begin
 
   update public.organization_invitations
   set status = 'cancelled'
-  where id = p_invitation and status = 'pending';
+  where id = p_invitation;
 end;
 $$;
 
@@ -449,7 +576,7 @@ begin
       add column preferences jsonb not null default '{"email_notifications": true, "theme": "system"}'::jsonb
       check (jsonb_typeof(preferences) = 'object');
   end if;
-end $$;
+end; $$;
 
 grant update (preferences) on public.profiles to authenticated;
 

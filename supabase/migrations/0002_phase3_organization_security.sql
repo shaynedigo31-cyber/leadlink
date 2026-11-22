@@ -99,7 +99,7 @@ begin
   end if;
 
   update public.organizations set status = p_status where id = p_org;
-end
+end;
 $$;
 
 -- Membership and role writes are replaced by narrowly validated RPCs below.
@@ -156,7 +156,7 @@ begin
     insert into public.organization_members (org_id, user_id, status)
     values (p_org, auth.uid(), 'pending');
   end if;
-end
+end;
 $$;
 
 -- Reject any role with a wildcard in generic role-management flows. Wildcard
@@ -207,7 +207,7 @@ begin
   values (p_org, btrim(p_name), v_permissions, false)
   returning id into v_role;
   return v_role;
-end
+end;
 $$;
 
 create or replace function public.update_org_role(p_role uuid, p_name text, p_permissions text[])
@@ -266,7 +266,7 @@ begin
   update public.org_roles
   set name = btrim(p_name), permissions = v_permissions
   where id = p_role;
-end
+end;
 $$;
 
 create or replace function public.delete_org_role(p_role uuid)
@@ -300,7 +300,7 @@ begin
     raise exception 'Reassign members before deleting this role';
   end if;
   delete from public.org_roles where id = p_role;
-end
+end;
 $$;
 
 create or replace function public.approve_membership_request(p_member uuid, p_role uuid)
@@ -356,7 +356,7 @@ begin
   update public.organization_members
   set role_id = p_role, status = 'active', joined_at = now()
   where id = p_member;
-end
+end;
 $$;
 
 create or replace function public.reject_membership_request(p_member uuid)
@@ -389,7 +389,7 @@ begin
     raise exception 'You do not have permission to manage members';
   end if;
   update public.organization_members set status = 'removed' where id = p_member;
-end
+end;
 $$;
 
 create or replace function public.assign_org_member_role(p_member uuid, p_role uuid)
@@ -448,7 +448,7 @@ begin
     raise exception 'Only an organization Owner can assign privileged permissions';
   end if;
   update public.organization_members set role_id = p_role where id = p_member;
-end
+end;
 $$;
 
 create or replace function public.set_org_member_position(p_member uuid, p_position_title text)
@@ -495,7 +495,7 @@ begin
   update public.organization_members
   set position_title = v_trimmed
   where id = p_member;
-end
+end;
 $$;
 
 create or replace function public.remove_org_member(p_member uuid)
@@ -553,7 +553,7 @@ begin
   update public.organization_members
   set role_id = null, status = 'removed'
   where id = p_member;
-end
+end;
 $$;
 
 create or replace function public.leave_organization(p_org uuid)
@@ -594,7 +594,7 @@ begin
   update public.organization_members
   set role_id = null, status = 'removed'
   where id = v_member;
-end
+end;
 $$;
 
 create or replace function public.cancel_membership_request(p_member uuid)
@@ -608,7 +608,7 @@ begin
   if not found then
     raise exception 'Pending membership request not found';
   end if;
-end
+end;
 $$;
 
 create or replace function public.transfer_organization_ownership(p_org uuid, p_new_owner uuid)
@@ -676,7 +676,7 @@ begin
         and r.permissions @> array['*']::text[]
     );
   update public.organization_members set role_id = v_owner_role where id = v_target;
-end
+end;
 $$;
 
 -- Helpers required by existing RLS policies remain callable by authenticated
