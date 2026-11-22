@@ -1,6 +1,6 @@
 import {
   Bell, CalendarDays, Compass, FolderKanban, Folders, GraduationCap,
-  History, LayoutDashboard, Megaphone, Repeat, Settings, UserCircle, Users, Building2, Mail, Send,
+  History, LayoutDashboard, Megaphone, Repeat, Settings, UserCircle, Users, Building2, Mail, Send, Award,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
@@ -20,6 +20,8 @@ export const personalNav: NavItem[] = [
 export const orgNav = (orgId: string): NavItem[] => [
   { label: 'Dashboard', to: `/org/${orgId}/dashboard`, icon: LayoutDashboard },
   { label: 'Members', to: `/org/${orgId}/members`, icon: Users },
+  { label: 'Officers', to: `/org/${orgId}/officers`, icon: Award },
+  { label: 'Activity Log', to: `/org/${orgId}/activity`, icon: History },
   { label: 'Events', to: `/org/${orgId}/events`, icon: CalendarDays },
   { label: 'Projects', to: `/org/${orgId}/projects`, icon: FolderKanban },
   { label: 'Announcements', to: `/org/${orgId}/announcements`, icon: Megaphone },

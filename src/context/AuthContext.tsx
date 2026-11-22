@@ -22,6 +22,7 @@ type Row = {
 type AuthState = {
   user: User | null
   fullName: string
+  isPlatformAdmin: boolean
   loading: boolean
   memberships: Membership[]
   refresh: () => Promise<void>
@@ -35,6 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(isSupabaseConfigured)
   const [memberships, setMemberships] = useState<Membership[]>([])
   const [fullName, setFullName] = useState('')
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false)
   const user = session?.user ?? null
   const uid = user?.id
 
@@ -52,6 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!uid) {
       setMemberships([])
       setFullName('')
+      setIsPlatformAdmin(false)
       return
     }
     const [m, p] = await Promise.all([
@@ -60,7 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .select('id, org_id, status, organizations(name, status), org_roles!organization_members_role_id_fkey(name)')
         .eq('user_id', uid)
         .neq('status', 'removed'),
-      supabase.from('profiles').select('full_name').eq('id', uid).maybeSingle(),
+      supabase.from('profiles').select('full_name, is_platform_admin').eq('id', uid).maybeSingle(),
     ])
     if (m.error) console.error('Memberships error:', m.error.message)
     if (!m.error && m.data) {
@@ -76,7 +79,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         })),
       )
     }
-    setFullName((p.data as { full_name?: string } | null)?.full_name ?? '')
+    const profileData = p.data as { full_name?: string; is_platform_admin?: boolean } | null
+    setFullName(profileData?.full_name ?? '')
+    setIsPlatformAdmin(Boolean(profileData?.is_platform_admin))
   }, [uid])
 
   useEffect(() => {
@@ -87,10 +92,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut()
     setMemberships([])
     setFullName('')
+    setIsPlatformAdmin(false)
   }, [])
 
   return (
-    <AuthContext.Provider value={{ user, fullName, loading, memberships, refresh, signOut }}>
+    <AuthContext.Provider value={{ user, fullName, isPlatformAdmin, loading, memberships, refresh, signOut }}>
       {children}
     </AuthContext.Provider>
   )
