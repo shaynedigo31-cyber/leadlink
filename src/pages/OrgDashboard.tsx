@@ -1,7 +1,9 @@
+import { useState, useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { CalendarDays, FileText, ListChecks, Users } from 'lucide-react'
 import MockBanner from '../components/MockBanner'
 import { useAuth } from '../context/AuthContext'
+import { supabase } from '../lib/supabase'
 import { mockEvents, mockStats, mockTasks } from '../lib/mock'
 
 const icons = [Users, CalendarDays, ListChecks, FileText]
@@ -10,12 +12,41 @@ export default function OrgDashboard() {
   const { orgId } = useParams()
   const { memberships } = useAuth()
   const membership = memberships.find((m) => m.org_id === orgId)
+  const [realMemberCount, setRealMemberCount] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (!orgId) return
+    supabase
+      .from('organization_members')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', orgId)
+      .eq('status', 'active')
+      .then(({ count }) => {
+        if (count !== null) setRealMemberCount(count)
+      })
+  }, [orgId])
 
   if (!membership) {
     return (
       <div className="card mx-auto mt-10 max-w-md p-10 text-center">
         <h1 className="text-xl font-bold">Organization not found</h1>
         <p className="mt-2 text-sm text-muted">It doesn’t exist, or you aren’t a member of it.</p>
+        <Link to="/dashboard" className="btn-primary mt-6">Back to dashboard</Link>
+      </div>
+    )
+  }
+
+  if (membership.status !== 'active' || membership.org_status !== 'approved') {
+    const message = membership.status !== 'active'
+      ? 'Your membership request is awaiting approval.'
+      : membership.org_status === 'pending'
+        ? 'This organization is awaiting platform approval.'
+        : `This organization is ${membership.org_status} and its workspace is unavailable.`
+
+    return (
+      <div className="card mx-auto mt-10 max-w-md p-10 text-center">
+        <h1 className="text-xl font-bold">{membership.org_name}</h1>
+        <p className="mt-2 text-sm text-muted">{message}</p>
         <Link to="/dashboard" className="btn-primary mt-6">Back to dashboard</Link>
       </div>
     )
@@ -38,10 +69,14 @@ export default function OrgDashboard() {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {mockStats.map((s, i) => {
           const Icon = icons[i]
+          const displayValue = s.label === 'Active members' && realMemberCount !== null
+            ? String(realMemberCount)
+            : s.value
+
           return (
             <div key={s.label} className="card p-4">
               <span className="icon-chip"><Icon size={20} strokeWidth={1.75} /></span>
-              <p className="mt-3 font-display text-3xl font-extrabold tabular-nums">{s.value}</p>
+              <p className="mt-3 font-display text-3xl font-extrabold tabular-nums">{displayValue}</p>
               <p className="text-sm text-muted">{s.label}</p>
             </div>
           )

@@ -55,7 +55,7 @@ create function public.set_updated_at() returns trigger language plpgsql as $$
 begin
   new.updated_at = now();
   return new;
-end $$;
+end; $$;
 
 create trigger profiles_updated before update on public.profiles
   for each row execute function public.set_updated_at();
@@ -70,7 +70,7 @@ begin
   values (new.id, coalesce(new.raw_user_meta_data ->> 'full_name', ''))
   on conflict (id) do nothing;
   return new;
-end $$;
+end; $$;
 
 create trigger on_auth_user_created after insert on auth.users
   for each row execute function public.handle_new_user();
@@ -140,7 +140,7 @@ begin
   values (v_org, auth.uid(), v_owner_role, 'Founder', 'active', now());
 
   return v_org;
-end $$;
+end; $$;
 
 create function public.set_organization_status(p_org uuid, p_status text)
 returns void language plpgsql security definer set search_path = '' as $$
@@ -152,7 +152,7 @@ begin
     raise exception 'Invalid status';
   end if;
   update public.organizations set status = p_status where id = p_org;
-end $$;
+end; $$;
 
 -- ============ PERMISSIONS (grants) ============
 revoke all on public.profiles, public.organizations, public.org_roles, public.organization_members from anon, authenticated;

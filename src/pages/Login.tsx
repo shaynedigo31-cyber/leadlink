@@ -49,7 +49,10 @@ export default function Login() {
           {errors.email && <p className="mt-1 text-xs text-rose-700">{errors.email}</p>}
         </div>
         <div>
-          <label htmlFor="password" className="mb-1.5 block text-sm font-medium">Password</label>
+          <div className="mb-1.5 flex items-center justify-between">
+            <label htmlFor="password" className="block text-sm font-medium">Password</label>
+            <Link to="/forgot-password" className="text-xs font-semibold text-brand hover:underline">Forgot password?</Link>
+          </div>
           <input id="password" type="password" autoComplete="current-password" className="input" value={password} onChange={(e) => setPassword(e.target.value)} aria-invalid={!!errors.password} />
           {errors.password && <p className="mt-1 text-xs text-rose-700">{errors.password}</p>}
         </div>
