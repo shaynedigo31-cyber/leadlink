@@ -223,12 +223,40 @@ create unique index if not exists unique_pending_org_invitation
 
 do $$
 begin
-  if not exists (
+  if exists (
     select 1
     from pg_constraint
     where conname = 'organization_invitations_role_same_org_fkey'
       and conrelid = 'public.organization_invitations'::regclass
   ) then
+    if not exists (
+      select 1
+      from pg_constraint
+      where conname = 'organization_invitations_role_same_org_fkey'
+        and conrelid = 'public.organization_invitations'::regclass
+        and contype = 'f'
+        and conkey = array[
+          (select attnum from pg_attribute
+           where attrelid = 'public.organization_invitations'::regclass and attname = 'org_id'),
+          (select attnum from pg_attribute
+           where attrelid = 'public.organization_invitations'::regclass and attname = 'role_id')
+        ]::smallint[]
+        and confrelid = 'public.org_roles'::regclass
+        and confkey = array[
+          (select attnum from pg_attribute
+           where attrelid = 'public.org_roles'::regclass and attname = 'org_id'),
+          (select attnum from pg_attribute
+           where attrelid = 'public.org_roles'::regclass and attname = 'id')
+        ]::smallint[]
+        and confmatchtype = 's'
+        and confupdtype = 'a'
+        and confdeltype = 'c'
+        and convalidated
+        and not condeferrable
+    ) then
+      raise exception 'organization_invitations_role_same_org_fkey exists with an unexpected definition';
+    end if;
+  else
     alter table public.organization_invitations
       add constraint organization_invitations_role_same_org_fkey
       foreign key (org_id, role_id)
