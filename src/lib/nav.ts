@@ -2,6 +2,7 @@ import {
   Bell, CalendarDays, Compass, FolderKanban, Folders, GraduationCap,
   History, LayoutDashboard, Megaphone, Repeat, Settings, UserCircle, Users, Building2, Mail, Send, Award,
 } from 'lucide-react'
+import { ShieldCheck } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 export type NavItem = { label: string; to: string; icon: LucideIcon }
@@ -32,3 +33,8 @@ export const orgNav = (orgId: string): NavItem[] => [
   { label: 'Settings', to: `/org/${orgId}/settings`, icon: Settings },
 ]
 
+
+
+export const adminNav: NavItem[] = [
+  { label: 'Approvals', to: '/admin/approvals', icon: ShieldCheck },
+]

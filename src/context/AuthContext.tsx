@@ -9,14 +9,19 @@ export type Membership = {
   org_name: string
   org_status: string
   role_name: string | null
+  position_title: string | null
+  permissions: string[]
 }
 
 type Row = {
   id: string
   org_id: string
-  status: Membership['status']
-  organizations: { name: string; status: string } | null
-  org_roles: { name: string } | null
+  org_name: string
+  org_status: string
+  member_status: Membership['status']
+  role_name: string | null
+  position_title: string | null
+  permissions: string[] | null
 }
 
 type AuthState = {
@@ -24,6 +29,7 @@ type AuthState = {
   fullName: string
   isPlatformAdmin: boolean
   loading: boolean
+  dataReady: boolean
   memberships: Membership[]
   refresh: () => Promise<void>
   signOut: () => Promise<void>
@@ -34,6 +40,7 @@ const AuthContext = createContext<AuthState | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(isSupabaseConfigured)
+  const [dataReady, setDataReady] = useState(false)
   const [memberships, setMemberships] = useState<Membership[]>([])
   const [fullName, setFullName] = useState('')
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false)
@@ -58,34 +65,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
     const [m, p] = await Promise.all([
-      supabase
-        .from('organization_members')
-        .select('id, org_id, status, organizations(name, status), org_roles!organization_members_role_id_fkey(name)')
-        .eq('user_id', uid)
-        .neq('status', 'removed'),
+      supabase.rpc('get_my_memberships'),
       supabase.from('profiles').select('full_name, is_platform_admin').eq('id', uid).maybeSingle(),
     ])
-    if (m.error) console.error('Memberships error:', m.error.message)
-    if (!m.error && m.data) {
-      const rows = m.data as unknown as Row[]
+    if (m.error) {
+      console.error('Memberships error:', m.error.message)
+    } else {
+      const rows = (m.data ?? []) as Row[]
       setMemberships(
         rows.map((r) => ({
           id: r.id,
           org_id: r.org_id,
-          status: r.status,
-          org_name: r.organizations?.name ?? 'Unknown organization',
-          org_status: r.organizations?.status ?? 'pending',
-          role_name: r.org_roles?.name ?? null,
+          status: r.member_status,
+          org_name: r.org_name,
+          org_status: r.org_status,
+          role_name: r.role_name,
+          position_title: r.position_title,
+          permissions: r.permissions ?? [],
         })),
       )
     }
-    const profileData = p.data as { full_name?: string; is_platform_admin?: boolean } | null
-    setFullName(profileData?.full_name ?? '')
-    setIsPlatformAdmin(Boolean(profileData?.is_platform_admin))
+    const profile = p.data as { full_name?: string; is_platform_admin?: boolean } | null
+    setFullName(profile?.full_name ?? '')
+    setIsPlatformAdmin(profile?.is_platform_admin ?? false)
   }, [uid])
 
   useEffect(() => {
-    void refresh()
+    setDataReady(false)
+    void refresh().finally(() => setDataReady(true))
   }, [refresh])
 
   const signOut = useCallback(async () => {
@@ -96,7 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <AuthContext.Provider value={{ user, fullName, isPlatformAdmin, loading, memberships, refresh, signOut }}>
+    <AuthContext.Provider value={{ user, fullName, isPlatformAdmin, loading, dataReady, memberships, refresh, signOut }}>
       {children}
     </AuthContext.Provider>
   )
@@ -107,5 +114,3 @@ export function useAuth(): AuthState {
   if (!ctx) throw new Error('useAuth must be used inside AuthProvider')
   return ctx
 }
-
-

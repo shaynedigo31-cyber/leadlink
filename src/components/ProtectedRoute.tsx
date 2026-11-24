@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { isSupabaseConfigured } from '../lib/supabase'
 
 export default function ProtectedRoute() {
-  const { user, loading } = useAuth()
+  const { user, loading, dataReady } = useAuth()
   const location = useLocation()
 
   if (!isSupabaseConfigured) {
@@ -15,7 +15,7 @@ export default function ProtectedRoute() {
       </div>
     )
   }
-  if (loading) {
+  if (loading || (user && !dataReady)) {
     return (
       <div className="space-y-3 p-10">
         <div className="h-6 w-48 animate-pulse rounded-lg bg-brand-soft" />

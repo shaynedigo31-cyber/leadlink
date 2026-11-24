@@ -3,16 +3,16 @@ import { Link, NavLink, Outlet, useNavigate, useParams } from 'react-router-dom'
 import { ChevronsUpDown, LogOut, Menu, X } from 'lucide-react'
 import Logo from '../components/Logo'
 import CommandPalette from '../components/CommandPalette'
-import { orgNav, personalNav } from '../lib/nav'
+import { adminNav, orgNav, personalNav } from '../lib/nav'
 import { useAuth } from '../context/AuthContext'
 
 export default function AppLayout() {
   const { orgId } = useParams()
-  const { user, fullName, memberships, signOut } = useAuth()
+  const { user, fullName, isPlatformAdmin, memberships, signOut } = useAuth()
   const navigate = useNavigate()
   const [drawer, setDrawer] = useState(false)
   const [switcher, setSwitcher] = useState(false)
-  const items = useMemo(() => (orgId ? orgNav(orgId) : personalNav), [orgId])
+  const items = useMemo(() => (orgId ? orgNav(orgId) : isPlatformAdmin ? [...personalNav, ...adminNav] : personalNav), [orgId, isPlatformAdmin])
   const activeOrgs = memberships.filter((m) => m.status === 'active')
   const currentOrg = memberships.find((m) => m.org_id === orgId)
   const displayName = fullName || user?.email || 'You'
@@ -86,3 +86,6 @@ export default function AppLayout() {
     </div>
   )
 }
+
+
+
